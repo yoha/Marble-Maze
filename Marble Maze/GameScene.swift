@@ -9,7 +9,7 @@
 import SpriteKit
 import CoreMotion
 
-class GameScene: SKScene {
+class GameScene: SKScene, SKPhysicsContactDelegate {
     
     // MARK: - Stored Properties
     
@@ -17,6 +17,14 @@ class GameScene: SKScene {
     let playerStartingPosition: CGPoint = CGPoint(x: 96, y: 672)
     var lastTouchPosition: CGPoint? // <-- to stimulate gravity on the simulator
     var motionManager: CMMotionManager!
+    
+    var scoreLabelNode: SKLabelNode!
+    var score: Int = 0 {
+        didSet {
+            self.scoreLabelNode.text = "Score: \(score)"
+        }
+    }
+    var gameOver = false
     
     // MARK: - Enums
     
@@ -26,6 +34,13 @@ class GameScene: SKScene {
         case Star = 4
         case Vortex = 8
         case Finish = 16
+    }
+    
+    // MARK: - Delegate Methods
+    
+    func didBeginContact(contact: SKPhysicsContact) {
+        if contact.bodyA.node == self.player { self.playerCollideWithNode(contact.bodyB.node!) }
+        else if contact.bodyB.node == self.player { self.playerCollideWithNode(contact.bodyA.node!) }
     }
     
     // MARK: - Local Methods
@@ -119,14 +134,70 @@ class GameScene: SKScene {
         
         self.addChild(backgroundSpriteNode)
     }
+    func loadScoreLabelNode() {
+        self.scoreLabelNode = SKLabelNode(fontNamed: "Chalkduster")
+        self.scoreLabelNode.text = "Score: 0"
+        self.scoreLabelNode.horizontalAlignmentMode = .Left
+        self.scoreLabelNode.position = CGPoint(x: 16, y: 16)
+        self.addChild(self.scoreLabelNode)
+    }
+    
+    func playerCollideWithNode(node: SKNode) {
+        switch node.name! {
+        case "vortex":
+            self.player.physicsBody!.dynamic = false
+            self.gameOver = true
+            --self.score
+            
+            let movePlayerToVortex = SKAction.moveTo(node.position, duration: 0.25)
+            let scalePlayerDown = SKAction.scaleTo(0.0001, duration: 0.25)
+            let removePlayer = SKAction.removeFromParent()
+            let actionSequence = SKAction.sequence([movePlayerToVortex, scalePlayerDown, removePlayer])
+            self.player.runAction(actionSequence, completion: { [unowned self] () -> Void in
+                self.createPlayer()
+                self.gameOver = false
+                })
+            
+        case "star":
+            node.hidden = true
+            ++self.score
+            
+        case "finish":
+            let movePlayerToFlag = SKAction.moveTo(node.position, duration: 0.25)
+            self.player.runAction(movePlayerToFlag)
+            
+            let alertController = UIAlertController(title: "Congrats!", message: "You've made it to the end!", preferredStyle: .Alert)
+            let alertActionToPlayNextLevel = UIAlertAction(title: "Play next level.", style: .Default, handler: nil)
+            let alertActionToPlayCurrentLevel = UIAlertAction(title: "Play this level again.", style: .Default, handler: { (alertAction) -> Void in
+                self.restartGame()
+            })
+            alertController.addAction(alertActionToPlayNextLevel)
+            alertController.addAction(alertActionToPlayCurrentLevel)
+            self.view!.window!.rootViewController?.presentViewController(alertController, animated: true, completion: nil)
+            
+        default: break
+        }
+    }
+    
+    func restartGame() {
+        self.score = 0
+        self.player.removeFromParent()
+        self.createPlayer()
+        self.enumerateChildNodesWithName("star") { (starNode, _) -> Void in
+            starNode.hidden = false
+        }
+    }
     
     // MARK: - Methods Override
     
     override func didMoveToView(view: SKView) {
-        self.physicsWorld.gravity = CGVector(dx: 0, dy: 0) 
+        self.physicsWorld.contactDelegate = self
+        self.physicsWorld.gravity = CGVector(dx: 0, dy: 0)
+        
         self.loadBackgroundSpriteNode()
         self.loadLevel()
         self.createPlayer()
+        self.loadScoreLabelNode()
         
         self.motionManager = CMMotionManager()
         self.motionManager.startAccelerometerUpdates()
@@ -134,6 +205,7 @@ class GameScene: SKScene {
     
     override func update(currentTime: CFTimeInterval) {
         /* Called before each frame is rendered */
+        guard !gameOver else { return }
         #if (arch(i386) || arch(x86_64)) // <-- if game is tested on OSX's simulators
             if let currentTouch = self.lastTouchPosition {
                 let distanceBetweenTouchAndPlayer = CGPointMake(currentTouch.x - self.player.position.x, currentTouch.y - self.player.position.y)
