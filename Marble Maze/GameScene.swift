@@ -7,6 +7,7 @@
 //
 
 import SpriteKit
+import CoreMotion
 
 class GameScene: SKScene {
     
@@ -15,6 +16,7 @@ class GameScene: SKScene {
     var player: SKSpriteNode!
     let playerStartingPosition: CGPoint = CGPoint(x: 96, y: 672)
     var lastTouchPosition: CGPoint? // <-- to stimulate gravity on the simulator
+    var motionManager: CMMotionManager!
     
     // MARK: - Enums
     
@@ -125,15 +127,24 @@ class GameScene: SKScene {
         self.loadBackgroundSpriteNode()
         self.loadLevel()
         self.createPlayer()
+        
+        self.motionManager = CMMotionManager()
+        self.motionManager.startAccelerometerUpdates()
     }
     
     override func update(currentTime: CFTimeInterval) {
         /* Called before each frame is rendered */
-        if let currentTouch = self.lastTouchPosition {
-            let distanceBetweenTouchAndPlayer = CGPointMake(currentTouch.x - self.player.position.x, currentTouch.y - self.player.position.y)
-            self.physicsWorld.gravity = CGVectorMake(distanceBetweenTouchAndPlayer.x / 100, distanceBetweenTouchAndPlayer.y / 100)
+        #if (arch(i386) || arch(x86_64)) // <-- if game is tested on OSX's simulators
+            if let currentTouch = self.lastTouchPosition {
+                let distanceBetweenTouchAndPlayer = CGPointMake(currentTouch.x - self.player.position.x, currentTouch.y - self.player.position.y)
+                self.physicsWorld.gravity = CGVectorMake(distanceBetweenTouchAndPlayer.x / 100, distanceBetweenTouchAndPlayer.y / 100)
+            }
+        #else // <-- if game is tested on iOS devices
+            if let accelerometerData = self.motionManager.accelerometerData {
+                self.physicsWorld.gravity = CGVectorMake(CGFloat(accelerometerData.acceleration.y * -50), CGFloat(accelerometerData.acceleration.x * 50))
+            }
+        #endif
         }
-    }
     
     override func touchesBegan(touches: Set<UITouch>, withEvent event: UIEvent?) {
         if let touch = touches.first {
