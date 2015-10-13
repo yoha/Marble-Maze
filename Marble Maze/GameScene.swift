@@ -10,6 +10,14 @@ import SpriteKit
 
 class GameScene: SKScene {
     
+    // MARK: - Stored Properties
+    
+    var player: SKSpriteNode!
+    let playerStartingPosition: CGPoint = CGPoint(x: 96, y: 672)
+    var lastTouchPosition: CGPoint? // <-- to stimulate gravity on the simulator
+    
+    // MARK: - Enums
+    
     enum CollisionTypes: UInt32 {
         case Player = 1
         case Wall = 2
@@ -20,6 +28,19 @@ class GameScene: SKScene {
     
     // MARK: - Local Methods
     
+    func createPlayer() {
+        self.player = SKSpriteNode(imageNamed: "player")
+        self.player.position = self.playerStartingPosition
+        
+        self.player.physicsBody = SKPhysicsBody(circleOfRadius: self.player.size.width / 2)
+        self.player.physicsBody!.categoryBitMask = CollisionTypes.Player.rawValue
+        self.player.physicsBody!.collisionBitMask = CollisionTypes.Wall.rawValue
+        self.player.physicsBody!.contactTestBitMask = CollisionTypes.Star.rawValue | CollisionTypes.Vortex.rawValue | CollisionTypes.Finish.rawValue
+        self.player.physicsBody!.allowsRotation = false
+        self.player.physicsBody!.linearDamping = 0.5 // <-- cause friction
+        
+        self.addChild(self.player)
+    }
     func loadLevel() {
         if let levelPath = NSBundle.mainBundle().pathForResource("level1", ofType: "txt") {
             if let levelString = try? NSString(contentsOfFile: levelPath, usedEncoding: nil) {
@@ -100,16 +121,40 @@ class GameScene: SKScene {
     // MARK: - Methods Override
     
     override func didMoveToView(view: SKView) {
+        self.physicsWorld.gravity = CGVector(dx: 0, dy: 0) 
         self.loadBackgroundSpriteNode()
         self.loadLevel()
+        self.createPlayer()
+    }
+    
+    override func update(currentTime: CFTimeInterval) {
+        /* Called before each frame is rendered */
+        if let currentTouch = self.lastTouchPosition {
+            let distanceBetweenTouchAndPlayer = CGPointMake(currentTouch.x - self.player.position.x, currentTouch.y - self.player.position.y)
+            self.physicsWorld.gravity = CGVectorMake(distanceBetweenTouchAndPlayer.x / 100, distanceBetweenTouchAndPlayer.y / 100)
+        }
     }
     
     override func touchesBegan(touches: Set<UITouch>, withEvent event: UIEvent?) {
-       /* Called when a touch begins */
+        if let touch = touches.first {
+            let currentLocationInNode = touch.locationInNode(self)
+            self.lastTouchPosition = currentLocationInNode
+        }
         
     }
    
-    override func update(currentTime: CFTimeInterval) {
-        /* Called before each frame is rendered */
+    override func touchesMoved(touches: Set<UITouch>, withEvent event: UIEvent?) {
+        if let touch = touches.first {
+            let currentLocationInNode = touch.locationInNode(self)
+            self.lastTouchPosition = currentLocationInNode
+        }
+    }
+    
+    override func touchesCancelled(touches: Set<UITouch>?, withEvent event: UIEvent?) {
+        self.lastTouchPosition = nil
+    }
+    
+    override func touchesEnded(touches: Set<UITouch>, withEvent event: UIEvent?) {
+        self.lastTouchPosition = nil
     }
 }
